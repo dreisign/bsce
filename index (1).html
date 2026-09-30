@@ -1,0 +1,1955 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSCE 3A - Fees & Payment Tracker</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Vue 3 CDN -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Supabase JS: shared online database + authentication -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Google Fonts Inter & Orbitron -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        tech: ['Orbitron', 'sans-serif'],
+                    },
+                    colors: {
+                        eng: {
+                            orange: '#f97316',
+                            'orange-hover': '#ea580c',
+                            dark: '#09090b',
+                            card: '#18181b',
+                            surface: '#27272a',
+                            border: '#3f3f46'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #09090b;
+            color: #f4f4f5;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #18181b;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #3f3f46;
+            border-radius: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #f97316;
+        }
+
+        /* Printable Statement of Account styling */
+        @media print {
+            body {
+                background-color: #ffffff !important;
+                color: #000000 !important;
+            }
+            body * {
+                visibility: hidden;
+            }
+            #printable-soa, #printable-soa * {
+                visibility: visible;
+                color: #000000 !important;
+            }
+            #printable-soa {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                background: white !important;
+                padding: 20px;
+            }
+            .no-print {
+                display: none !important;
+            }
+        }
+    </style>
+</head>
+<body class="bg-zinc-950 text-zinc-100 antialiased selection:bg-orange-500 selection:text-black">
+    <div id="app" class="min-h-screen flex flex-col pb-12">
+        
+        <!-- Header / Navigation Bar -->
+        <header class="bg-black/90 backdrop-blur border-b border-orange-500/30 sticky top-0 z-30 shadow-xl shadow-orange-500/5">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-orange-600 via-orange-500 to-amber-400 flex items-center justify-center text-black font-extrabold text-xl shadow-lg shadow-orange-500/30 ring-2 ring-orange-400/50">
+                        <i class="fa-solid fa-hard-hat"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-black tracking-wider text-white font-tech uppercase flex items-center gap-2">
+                            BSCE 3A <span class="text-xs font-sans px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold border border-orange-500/40">TREASURY</span>
+                        </h1>
+                        <p class="text-[11px] text-zinc-400">Civil Engineering Class Fees Portal</p>
+                    </div>
+                </div>
+
+                <!-- Current Mode Indicator & Switcher -->
+                <div class="flex items-center gap-2 text-[10px] text-zinc-500">
+                    <span class="inline-block w-2 h-2 rounded-full" :class="isSynced ? 'bg-emerald-400' : 'bg-zinc-600'"></span>
+                    {{ cloudStatus }}
+                </div>
+                <div class="flex items-center gap-3 flex-wrap">
+                    <!-- Mode Badge -->
+                    <div v-if="isAdmin" class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-500/20 border border-orange-500/50 text-orange-400 text-xs font-bold shadow-md animate-pulse">
+                        <i class="fa-solid fa-user-shield"></i>
+                        <span>TREASURER MODE (FULL ACCESS)</span>
+                    </div>
+                    <div v-else class="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-semibold">
+                        <i class="fa-solid fa-graduation-cap"></i>
+                        <span>STUDENT PORTAL (READ-ONLY)</span>
+                    </div>
+
+                    <!-- Role Switch Button -->
+                    <button v-if="!isAdmin" @click="openAdminPinModal()" class="bg-orange-500 hover:bg-orange-600 text-black font-extrabold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 transition shadow-lg shadow-orange-500/20 active:scale-95">
+                        <i class="fa-solid fa-key"></i> Treasurer Login
+                    </button>
+                    <button v-else @click="lockAdminMode()" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-semibold px-3 py-1.5 rounded-xl text-xs border border-zinc-700 flex items-center gap-1.5 transition">
+                        <i class="fa-solid fa-lock text-orange-400"></i> Lock & Switch to Student View
+                    </button>
+
+                    <!-- Realtime Cloud Sync Status -->
+                    <div class="text-[10px] px-2.5 py-1 rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full" :class="isSynced ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'"></span>
+                        <span>{{ isSynced ? 'Live Sync Active' : 'Offline / Local' }}</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 flex-grow w-full">
+            
+            <!-- Banner Notification for Student View -->
+            <div v-if="!isAdmin" class="bg-gradient-to-r from-blue-950/70 via-zinc-900 to-zinc-900 border border-blue-500/30 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center text-lg flex-shrink-0 border border-blue-500/30">
+                        <i class="fa-solid fa-circle-info"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-bold text-white">Student View Mode</h2>
+                        <p class="text-xs text-zinc-300">You are viewing your official BSCE 3A class balance. Search your name below to view your fees breakdown or request a clearance slip.</p>
+                    </div>
+                </div>
+                <button @click="showPaymentInfoModal = true" class="bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 whitespace-nowrap shadow-md">
+                    <i class="fa-solid fa-qrcode"></i> How to Pay (GCash Info)
+                </button>
+            </div>
+
+            <!-- Banner Notification for Treasurer Mode -->
+            <div v-else class="bg-gradient-to-r from-orange-950/60 via-zinc-900 to-zinc-900 border border-orange-500/40 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-orange-500/20 text-orange-400 flex items-center justify-center text-lg flex-shrink-0 border border-orange-500/30">
+                        <i class="fa-solid fa-user-gear"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-bold text-white">Treasurer Control Panel Active</h2>
+                        <p class="text-xs text-zinc-300">You have full administrative rights to log payments, add new fees, add students, edit records, and configure settings.</p>
+                    </div>
+                </div>
+                <div class="flex gap-2 flex-wrap">
+                    <button @click="openPaymentModal()" class="bg-orange-500 hover:bg-orange-600 text-black font-extrabold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1.5 shadow-md shadow-orange-500/20">
+                        <i class="fa-solid fa-plus-circle"></i> Log Payment Entry
+                    </button>
+                    <button @click="showSettingsModal = true" class="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-semibold px-3 py-2 rounded-xl transition flex items-center gap-1.5">
+                        <i class="fa-solid fa-gear text-orange-400"></i> Settings & PIN
+                    </button>
+                </div>
+            </div>
+
+            <!-- Summary Statistics Cards -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                <!-- Total Expected -->
+                <div class="bg-zinc-900/90 rounded-2xl p-4 shadow-md border border-zinc-800 flex items-center justify-between hover:border-orange-500/30 transition">
+                    <div>
+                        <p class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Required Collection</p>
+                        <h3 class="text-2xl font-extrabold text-white mt-1">₱{{ formatMoney(totalExpectedCollection) }}</h3>
+                        <p class="text-xs text-zinc-500 mt-1">{{ fees.length }} Fees × {{ students.length }} Students</p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-calculator"></i>
+                    </div>
+                </div>
+
+                <!-- Total Collected -->
+                <div class="bg-zinc-900/90 rounded-2xl p-4 shadow-md border border-zinc-800 flex items-center justify-between hover:border-emerald-500/30 transition">
+                    <div>
+                        <p class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Total Class Funds Collected</p>
+                        <h3 class="text-2xl font-extrabold text-emerald-400 mt-1">₱{{ formatMoney(totalCollectedAmount) }}</h3>
+                        <p class="text-xs text-emerald-400 font-semibold mt-1">
+                            <i class="fa-solid fa-circle-check"></i> {{ collectionRate.toFixed(1) }}% Cleared
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-wallet"></i>
+                    </div>
+                </div>
+
+                <!-- Remaining Balance -->
+                <div class="bg-zinc-900/90 rounded-2xl p-4 shadow-md border border-zinc-800 flex items-center justify-between hover:border-orange-500/30 transition">
+                    <div>
+                        <p class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">Outstanding Class Balance</p>
+                        <h3 class="text-2xl font-extrabold text-orange-500 mt-1">₱{{ formatMoney(totalRemainingBalance) }}</h3>
+                        <p class="text-xs text-orange-400 font-semibold mt-1">
+                            <i class="fa-solid fa-clock"></i> {{ unpaidStudentCount }} Students Pending
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-orange-500/10 text-orange-400 border border-orange-500/20 flex items-center justify-center text-xl">
+                        <i class="fa-solid fa-hand-holding-dollar"></i>
+                    </div>
+                </div>
+
+                <!-- Total Students -->
+                <div class="bg-zinc-900/90 rounded-2xl p-4 shadow-md border border-zinc-800 flex items-center justify-between hover:border-zinc-700 transition">
+                    <div>
+                        <p class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">BSCE 3A Enrolled</p>
+                        <h3 class="text-2xl font-extrabold text-white mt-1">{{ students.length }} <span class="text-sm font-normal text-zinc-400">Students</span></h3>
+                        <p class="text-xs text-emerald-400 font-semibold mt-1">
+                            <i class="fa-solid fa-user-check"></i> {{ fullyPaidStudentCount }} Fully Cleared
+                        </p>
+                    </div>
+                    <div class="w-12 h-12 rounded-xl bg-zinc-800 text-zinc-300 flex items-center justify-center text-xl border border-zinc-700">
+                        <i class="fa-solid fa-users"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STUDENT LOOKUP HERO (FOR STUDENT VIEW) -->
+            <div v-if="!isAdmin" class="bg-zinc-900/90 border border-orange-500/30 rounded-2xl p-5 mb-6 shadow-xl">
+                <div class="flex flex-col md:flex-row items-center justify-between gap-4">
+                    <div class="w-full md:w-1/2">
+                        <label class="block text-xs font-bold text-orange-400 uppercase tracking-wider mb-1">
+                            <i class="fa-solid fa-magnifying-glass mr-1"></i> Quick Student Account Search
+                        </label>
+                        <div class="relative">
+                            <input 
+                                type="text" 
+                                v-model="studentSearchInput" 
+                                placeholder="Type your name (e.g., Santos, Juan)..." 
+                                class="w-full pl-10 pr-4 py-3 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 text-sm placeholder-zinc-500 font-medium"
+                            >
+                            <i class="fa-solid fa-user absolute left-3.5 top-3.5 text-zinc-500 text-sm"></i>
+                        </div>
+                    </div>
+
+                    <div class="w-full md:w-1/2 flex items-center gap-2">
+                        <select v-model="selectedStudentLookupId" class="w-full py-3 px-3 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 text-sm">
+                            <option value="" disabled>-- Or Select Your Name From List --</option>
+                            <option v-for="student in sortedStudents" :key="student.id" :value="student.id">
+                                {{ student.name }} ({{ getStudentTotalBalance(student.id) === 0 ? 'CLEARED' : 'Bal: ₱' + formatMoney(getStudentTotalBalance(student.id)) }})
+                            </option>
+                        </select>
+                        <button v-if="selectedStudentLookup" @click="viewSOA(selectedStudentLookup)" class="bg-orange-500 hover:bg-orange-600 text-black font-extrabold px-4 py-3 rounded-xl text-xs flex items-center gap-1.5 transition whitespace-nowrap shadow-lg">
+                            <i class="fa-solid fa-file-invoice"></i> Statement
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Individual Result Preview Card -->
+                <div v-if="selectedStudentLookup" class="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-1 md:grid-cols-4 gap-4 bg-zinc-950/80 p-4 rounded-xl border border-zinc-800">
+                    <div>
+                        <div class="text-[10px] text-zinc-500 uppercase font-bold">Student Name</div>
+                        <div class="text-base font-extrabold text-white mt-0.5">{{ selectedStudentLookup.name }}</div>
+                        <div class="text-xs text-zinc-400">ID: {{ selectedStudentLookup.contact || 'N/A' }}</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-zinc-500 uppercase font-bold">Total Paid</div>
+                        <div class="text-base font-extrabold text-emerald-400 mt-0.5">₱{{ formatMoney(getStudentTotalPaid(selectedStudentLookup.id)) }}</div>
+                        <div class="text-xs text-zinc-400">Of ₱{{ formatMoney(totalFeesAmountPerStudent) }} total</div>
+                    </div>
+                    <div>
+                        <div class="text-[10px] text-zinc-500 uppercase font-bold">Remaining Balance</div>
+                        <div class="text-base font-extrabold mt-0.5" :class="getStudentTotalBalance(selectedStudentLookup.id) > 0 ? 'text-orange-400' : 'text-emerald-400'">
+                            ₱{{ formatMoney(getStudentTotalBalance(selectedStudentLookup.id)) }}
+                        </div>
+                        <div class="text-xs text-zinc-400">Pending fees: {{ getUnpaidFeeCount(selectedStudentLookup.id) }}</div>
+                    </div>
+                    <div class="flex items-center justify-end">
+                        <span :class="getStudentTotalBalance(selectedStudentLookup.id) === 0 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-orange-500/20 text-orange-400 border-orange-500/40'" class="px-3 py-1.5 rounded-full text-xs font-black uppercase border tracking-wider">
+                            {{ getStudentTotalBalance(selectedStudentLookup.id) === 0 ? '✓ FULLY CLEARED' : '⚠ PENDING BALANCE' }}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content Container with Tabs -->
+            <div class="bg-zinc-900/80 rounded-2xl shadow-xl border border-zinc-800 overflow-hidden mb-6">
+                <!-- Navigation Tabs -->
+                <div class="border-b border-zinc-800 bg-black/60 px-4 flex flex-wrap items-center justify-between gap-2">
+                    <nav class="flex space-x-1 sm:space-x-2 overflow-x-auto custom-scrollbar py-2.5" aria-label="Tabs">
+                        <button 
+                            @click="activeTab = 'matrix'" 
+                            :class="[activeTab === 'matrix' ? 'bg-orange-500 text-black font-extrabold shadow-md shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60 font-semibold']"
+                            class="px-3.5 py-2 text-xs sm:text-sm rounded-xl transition-all flex items-center gap-2 whitespace-nowrap">
+                            <i class="fa-solid fa-table-cells"></i> Payment Matrix
+                        </button>
+                        <button 
+                            @click="activeTab = 'students'" 
+                            :class="[activeTab === 'students' ? 'bg-orange-500 text-black font-extrabold shadow-md shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60 font-semibold']"
+                            class="px-3.5 py-2 text-xs sm:text-sm rounded-xl transition-all flex items-center gap-2 whitespace-nowrap">
+                            <i class="fa-solid fa-graduation-cap"></i> Roster ({{ students.length }})
+                        </button>
+                        <button 
+                            @click="activeTab = 'fees'" 
+                            :class="[activeTab === 'fees' ? 'bg-orange-500 text-black font-extrabold shadow-md shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60 font-semibold']"
+                            class="px-3.5 py-2 text-xs sm:text-sm rounded-xl transition-all flex items-center gap-2 whitespace-nowrap">
+                            <i class="fa-solid fa-tags"></i> Bayarin / Fees ({{ fees.length }})
+                        </button>
+                        <button 
+                            @click="activeTab = 'ledger'" 
+                            :class="[activeTab === 'ledger' ? 'bg-orange-500 text-black font-extrabold shadow-md shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60 font-semibold']"
+                            class="px-3.5 py-2 text-xs sm:text-sm rounded-xl transition-all flex items-center gap-2 whitespace-nowrap">
+                            <i class="fa-solid fa-receipt"></i> Payment Ledger
+                        </button>
+                        <button 
+                            v-if="isAdmin"
+                            @click="activeTab = 'reports'" 
+                            :class="[activeTab === 'reports' ? 'bg-orange-500 text-black font-extrabold shadow-md shadow-orange-500/20' : 'text-zinc-400 hover:text-white hover:bg-zinc-800/60 font-semibold']"
+                            class="px-3.5 py-2 text-xs sm:text-sm rounded-xl transition-all flex items-center gap-2 whitespace-nowrap">
+                            <i class="fa-solid fa-file-export"></i> Transparency & Backup
+                        </button>
+                    </nav>
+
+                    <!-- Search Filter Bar -->
+                    <div class="py-2 w-full sm:w-auto">
+                        <div class="relative">
+                            <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-zinc-500 text-xs"></i>
+                            <input 
+                                type="text" 
+                                v-model="searchQuery" 
+                                placeholder="Filter table records..." 
+                                class="w-full sm:w-52 pl-8 pr-3 py-1.5 text-xs bg-zinc-950 text-zinc-100 border border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder-zinc-500"
+                            >
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 1: PAYMENT MATRIX -->
+                <div v-if="activeTab === 'matrix'" class="p-4 sm:p-6">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-table-cells text-orange-500"></i> Class Fee Collection Matrix
+                            </h2>
+                            <p class="text-xs text-zinc-400">
+                                {{ isAdmin ? 'Click on any fee cell to quickly record or edit a student payment.' : 'Public class payment status matrix (Read-Only).' }}
+                            </p>
+                        </div>
+                        <div class="flex items-center gap-2 text-xs">
+                            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium">
+                                <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Fully Paid
+                            </span>
+                            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-orange-500/20 text-orange-400 border border-orange-500/30 font-medium">
+                                <span class="w-2 h-2 rounded-full bg-orange-500"></span> Partial
+                            </span>
+                            <span class="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-rose-500/20 text-rose-400 border border-rose-500/30 font-medium">
+                                <span class="w-2 h-2 rounded-full bg-rose-500"></span> Unpaid
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Matrix Table -->
+                    <div class="overflow-x-auto border border-zinc-800 rounded-xl custom-scrollbar">
+                        <table class="w-full text-left text-xs border-collapse">
+                            <thead>
+                                <tr class="bg-black text-zinc-300 font-bold uppercase tracking-wider border-b border-zinc-800">
+                                    <th class="py-3.5 px-4 sticky left-0 bg-black z-10 border-r border-zinc-800 min-w-[190px]">Student Name</th>
+                                    <th v-for="fee in filteredFees" :key="fee.id" class="py-3 px-3 min-w-[140px] text-center border-r border-zinc-800">
+                                        <div class="font-extrabold text-orange-400">{{ fee.name }}</div>
+                                        <div class="text-[10px] text-zinc-400 font-normal">₱{{ formatMoney(fee.amount) }}</div>
+                                    </th>
+                                    <th class="py-3.5 px-4 text-right bg-black min-w-[120px]">Total Balance</th>
+                                    <th class="py-3.5 px-3 text-center min-w-[100px]">Clearance</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-800/70">
+                                <tr v-for="student in filteredStudents" :key="student.id" class="hover:bg-orange-500/5 transition">
+                                    <!-- Student Name Cell -->
+                                    <td class="py-2.5 px-4 font-semibold text-zinc-100 sticky left-0 bg-zinc-900 border-r border-zinc-800 shadow-md">
+                                        <div class="flex items-center justify-between gap-2">
+                                            <span class="truncate">{{ student.name }}</span>
+                                            <button @click="viewSOA(student)" title="View Statement of Account" class="text-zinc-500 hover:text-orange-400 transition">
+                                                <i class="fa-solid fa-file-invoice"></i>
+                                            </button>
+                                        </div>
+                                    </td>
+
+                                    <!-- Fee Cells -->
+                                    <td v-for="fee in filteredFees" :key="fee.id" class="py-2 px-2 text-center border-r border-zinc-800/80">
+                                        <div 
+                                            @click="isAdmin ? quickPaymentEntry(student, fee) : viewSOA(student)" 
+                                            :class="[
+                                                getFeeStatusClass(student.id, fee.id, fee.amount),
+                                                isAdmin ? 'cursor-pointer hover:scale-105' : 'cursor-default'
+                                            ]"
+                                            class="py-1.5 px-2 rounded-xl border text-[11px] font-bold transition-all flex flex-col items-center justify-center gap-0.5">
+                                            <span>{{ getFeeStatusText(student.id, fee.id, fee.amount) }}</span>
+                                            <span class="text-[9px] opacity-80 font-normal">
+                                                ₱{{ formatMoney(getAmountPaidForFee(student.id, fee.id)) }} / ₱{{ formatMoney(fee.amount) }}
+                                            </span>
+                                        </div>
+                                    </td>
+
+                                    <!-- Remaining Balance Cell -->
+                                    <td class="py-2.5 px-4 text-right font-extrabold" :class="getStudentTotalBalance(student.id) > 0 ? 'text-orange-400' : 'text-emerald-400'">
+                                        ₱{{ formatMoney(getStudentTotalBalance(student.id)) }}
+                                    </td>
+
+                                    <!-- Clearance Status Badge -->
+                                    <td class="py-2.5 px-3 text-center">
+                                        <span v-if="getStudentTotalBalance(student.id) === 0" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
+                                            <i class="fa-solid fa-check mr-1"></i> CLEARED
+                                        </span>
+                                        <span v-else class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-rose-500/20 text-rose-400 border border-rose-500/40">
+                                            PENDING
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr v-if="filteredStudents.length === 0">
+                                    <td :colspan="filteredFees.length + 3" class="text-center py-10 text-zinc-500">
+                                        No matching student records found.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 2: CLASS ROSTER -->
+                <div v-if="activeTab === 'students'" class="p-4 sm:p-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-users text-orange-500"></i> BSCE 3A Class Roster
+                            </h2>
+                            <p class="text-xs text-zinc-400">Class student list and clearance balances.</p>
+                        </div>
+                        <div v-if="isAdmin" class="flex gap-2">
+                            <button @click="openStudentModal()" class="bg-orange-500 hover:bg-orange-600 text-black px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                                <i class="fa-solid fa-user-plus"></i> Add Student
+                            </button>
+                            <button @click="openBatchStudentModal()" class="bg-zinc-800 hover:bg-zinc-700 text-white px-3.5 py-1.5 rounded-xl text-xs font-semibold border border-zinc-700 flex items-center gap-1.5 transition">
+                                <i class="fa-solid fa-users-rectangle text-orange-400"></i> Batch Import
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div v-for="student in filteredStudents" :key="student.id" class="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 shadow-md hover:border-orange-500/50 transition group">
+                            <div class="flex items-start justify-between gap-2 border-b border-zinc-800/80 pb-3 mb-3">
+                                <div>
+                                    <h3 class="font-bold text-white text-sm group-hover:text-orange-400 transition">{{ student.name }}</h3>
+                                    <p class="text-xs text-zinc-500">Contact/ID: {{ student.contact || 'N/A' }}</p>
+                                </div>
+                                <span :class="getStudentTotalBalance(student.id) === 0 ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-orange-500/20 text-orange-400 border-orange-500/30'" class="px-2.5 py-0.5 text-[10px] font-extrabold rounded-full uppercase border">
+                                    {{ getStudentTotalBalance(student.id) === 0 ? 'Cleared' : 'Has Balance' }}
+                                </span>
+                            </div>
+
+                            <div class="space-y-1.5 text-xs mb-4">
+                                <div class="flex justify-between text-zinc-400">
+                                    <span>Total Paid:</span>
+                                    <span class="font-bold text-emerald-400">₱{{ formatMoney(getStudentTotalPaid(student.id)) }}</span>
+                                </div>
+                                <div class="flex justify-between text-zinc-400">
+                                    <span>Remaining Balance:</span>
+                                    <span class="font-bold text-orange-400">₱{{ formatMoney(getStudentTotalBalance(student.id)) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-2 pt-2 border-t border-zinc-800/80">
+                                <button v-if="isAdmin" @click="openPaymentModal(student.id)" class="flex-1 bg-orange-500/10 hover:bg-orange-500 hover:text-black text-orange-400 text-xs font-bold py-1.5 rounded-xl border border-orange-500/30 transition text-center">
+                                    <i class="fa-solid fa-plus-circle mr-1"></i> Pay
+                                </button>
+                                <button @click="viewSOA(student)" :class="isAdmin ? 'flex-1' : 'w-full'" class="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-semibold py-1.5 rounded-xl border border-zinc-700 transition text-center">
+                                    <i class="fa-solid fa-receipt mr-1 text-orange-400"></i> Statement
+                                </button>
+                                <button v-if="isAdmin" @click="deleteStudent(student)" class="text-zinc-500 hover:text-rose-400 p-1.5 rounded-lg transition" title="Delete Student">
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3: FEES (BAYARIN) MANAGEMENT -->
+                <div v-if="activeTab === 'fees'" class="p-4 sm:p-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-tags text-orange-500"></i> Class Fee Items (Bayarin)
+                            </h2>
+                            <p class="text-xs text-zinc-400">List of required fees for shirts, departmental activities, field work, etc.</p>
+                        </div>
+                        <button v-if="isAdmin" @click="openFeeModal()" class="bg-orange-500 hover:bg-orange-600 text-black px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-plus"></i> New Fee Item
+                        </button>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div v-for="fee in filteredFees" :key="fee.id" class="bg-zinc-950 border border-zinc-800 rounded-2xl p-4 shadow-md relative overflow-hidden group hover:border-orange-500/50 transition">
+                            <div class="flex items-start justify-between gap-2 mb-2">
+                                <div>
+                                    <h3 class="font-bold text-white text-sm group-hover:text-orange-400 transition">{{ fee.name }}</h3>
+                                    <p class="text-xs text-zinc-400 line-clamp-1">{{ fee.description || 'No description provided.' }}</p>
+                                </div>
+                                <div class="text-right">
+                                    <span class="text-lg font-extrabold text-orange-400">₱{{ formatMoney(fee.amount) }}</span>
+                                    <div class="text-[10px] text-zinc-500 uppercase">Per Student</div>
+                                </div>
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div class="mt-4">
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span class="text-zinc-400 font-medium">Class Collection</span>
+                                    <span class="font-extrabold text-orange-400">{{ getFeeCollectionPercentage(fee.id).toFixed(1) }}%</span>
+                                </div>
+                                <div class="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800">
+                                    <div class="bg-gradient-to-r from-orange-600 to-orange-400 h-2 rounded-full transition-all duration-500" :style="{ width: getFeeCollectionPercentage(fee.id) + '%' }"></div>
+                                </div>
+                                <div class="flex justify-between text-[11px] text-zinc-400 mt-1.5">
+                                    <span>Collected: <strong class="text-emerald-400">₱{{ formatMoney(getFeeTotalCollected(fee.id)) }}</strong></span>
+                                    <span>Target: <strong class="text-white">₱{{ formatMoney(fee.amount * students.length) }}</strong></span>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-zinc-800/80">
+                                <span class="text-[11px] text-zinc-500">Due: {{ fee.dueDate || 'Flexible' }}</span>
+                                <div v-if="isAdmin" class="flex items-center gap-1">
+                                    <button @click="editFee(fee)" class="text-zinc-400 hover:text-orange-400 p-1.5 rounded text-xs transition" title="Edit Fee">
+                                        <i class="fa-solid fa-pen-to-square"></i>
+                                    </button>
+                                    <button @click="deleteFee(fee)" class="text-zinc-500 hover:text-rose-400 p-1.5 rounded text-xs transition" title="Delete Fee">
+                                        <i class="fa-solid fa-trash-can"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 4: PAYMENT LEDGER -->
+                <div v-if="activeTab === 'ledger'" class="p-4 sm:p-6">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                        <div>
+                            <h2 class="text-base font-bold text-white flex items-center gap-2">
+                                <i class="fa-solid fa-receipt text-orange-500"></i> Class Treasury Payment Ledger
+                            </h2>
+                            <p class="text-xs text-zinc-400">Transparent chronological log of recorded student payments.</p>
+                        </div>
+                        <button v-if="isAdmin" @click="openPaymentModal()" class="bg-orange-500 hover:bg-orange-600 text-black px-3.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                            <i class="fa-solid fa-plus-circle"></i> Log Payment Entry
+                        </button>
+                    </div>
+
+                    <div class="overflow-x-auto border border-zinc-800 rounded-xl custom-scrollbar">
+                        <table class="w-full text-left text-xs">
+                            <thead class="bg-black text-zinc-300 font-bold uppercase tracking-wider border-b border-zinc-800">
+                                <tr>
+                                    <th class="py-3.5 px-4">Date</th>
+                                    <th class="py-3.5 px-4">Student</th>
+                                    <th class="py-3.5 px-4">Fee Item</th>
+                                    <th class="py-3.5 px-4">Amount Paid</th>
+                                    <th class="py-3.5 px-4">Mode</th>
+                                    <th class="py-3.5 px-4">Reference / Notes</th>
+                                    <th v-if="isAdmin" class="py-3.5 px-4 text-center">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-800">
+                                <tr v-for="payment in filteredPayments" :key="payment.id" class="hover:bg-zinc-800/40 transition">
+                                    <td class="py-3 px-4 text-zinc-400 font-mono">{{ formatDate(payment.date) }}</td>
+                                    <td class="py-3 px-4 font-bold text-white">{{ getStudentName(payment.studentId) }}</td>
+                                    <td class="py-3 px-4 text-zinc-200">
+                                        <span class="px-2.5 py-1 rounded-lg bg-zinc-800 text-orange-400 font-semibold border border-zinc-700">
+                                            {{ getFeeName(payment.feeId) }}
+                                        </span>
+                                    </td>
+                                    <td class="py-3 px-4 font-extrabold text-emerald-400 text-sm">₱{{ formatMoney(payment.amount) }}</td>
+                                    <td class="py-3 px-4">
+                                        <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase border"
+                                              :class="payment.mode === 'GCash' ? 'bg-blue-500/10 text-blue-400 border-blue-500/30' : payment.mode === 'Maya' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' : 'bg-orange-500/10 text-orange-400 border-orange-500/30'">
+                                            <i class="fa-solid" :class="payment.mode === 'Cash' ? 'fa-money-bill-wave' : 'fa-mobile-screen-button'"></i>
+                                            {{ payment.mode || 'Cash' }}
+                                        </span>
+                                    </td>
+                                    <td class="py-3 px-4 text-zinc-400 italic max-w-xs truncate">
+                                        {{ payment.reference || 'None' }}
+                                    </td>
+                                    <td v-if="isAdmin" class="py-3 px-4 text-center">
+                                        <button @click="deletePayment(payment.id)" class="text-zinc-500 hover:text-rose-400 p-1.5 rounded transition" title="Delete Entry">
+                                            <i class="fa-solid fa-trash-can"></i>
+                                        </button>
+                                    </td>
+                                </tr>
+                                <tr v-if="filteredPayments.length === 0">
+                                    <td :colspan="isAdmin ? 7 : 6" class="text-center py-10 text-zinc-500">
+                                        No payment logs recorded yet.
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 5: TREASURER ADMIN REPORTS & DATA CONTROL -->
+                <div v-if="activeTab === 'reports' && isAdmin" class="p-4 sm:p-6">
+                    <div class="mb-6">
+                        <h2 class="text-base font-bold text-white flex items-center gap-2">
+                            <i class="fa-solid fa-file-export text-orange-500"></i> Transparency & Backup Tools
+                        </h2>
+                        <p class="text-xs text-zinc-400">Export spreadsheets, save system backup files, or reset state.</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <!-- CSV Export Box -->
+                        <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-md">
+                            <div class="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-400 flex items-center justify-center text-lg mb-3">
+                                <i class="fa-solid fa-file-csv"></i>
+                            </div>
+                            <h3 class="font-bold text-white text-sm">Export Matrix (CSV)</h3>
+                            <p class="text-xs text-zinc-400 mt-1 mb-4">Download complete class ledger matrix compatible with Microsoft Excel or Google Sheets.</p>
+                            <button @click="exportToCSV()" class="w-full bg-orange-500 hover:bg-orange-600 text-black text-xs font-bold py-2.5 rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-orange-500/10">
+                                <i class="fa-solid fa-download"></i> Download CSV Matrix
+                            </button>
+                        </div>
+
+                        <!-- JSON Backup & Restore -->
+                        <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-md">
+                            <div class="w-10 h-10 rounded-xl bg-orange-500/10 border border-orange-500/30 text-orange-400 flex items-center justify-center text-lg mb-3">
+                                <i class="fa-solid fa-database"></i>
+                            </div>
+                            <h3 class="font-bold text-white text-sm">Data Backup & Restore</h3>
+                            <p class="text-xs text-zinc-400 mt-1 mb-4">Export or restore all fees, student records, and payment logs in a JSON file.</p>
+                            <div class="flex gap-2">
+                                <button @click="backupJSON()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 text-xs font-bold py-2 rounded-xl transition flex items-center justify-center gap-1">
+                                    <i class="fa-solid fa-download text-orange-400"></i> Backup
+                                </button>
+                                <label class="flex-1 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-bold py-2 rounded-xl transition flex items-center justify-center gap-1 cursor-pointer border border-zinc-700">
+                                    <i class="fa-solid fa-upload text-orange-400"></i> Restore
+                                    <input type="file" @change="restoreJSON" class="hidden" accept=".json">
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Reset Sample Data -->
+                        <div class="bg-zinc-950 border border-zinc-800 rounded-2xl p-5 shadow-md">
+                            <div class="w-10 h-10 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center text-lg mb-3">
+                                <i class="fa-solid fa-triangle-exclamation"></i>
+                            </div>
+                            <h3 class="font-bold text-white text-sm">Reset or Seed Data</h3>
+                            <p class="text-xs text-zinc-400 mt-1 mb-4">Clear all current records or reload default demo Civil Engineering data.</p>
+                            <div class="flex gap-2">
+                                <button @click="confirmResetData()" class="flex-1 bg-rose-500/10 hover:bg-rose-500 hover:text-white text-rose-400 border border-rose-500/30 text-xs font-bold py-2 rounded-xl transition">
+                                    Clear All
+                                </button>
+                                <button @click="loadSampleData()" class="flex-1 bg-orange-500 hover:bg-orange-600 text-black text-xs font-bold py-2 rounded-xl transition">
+                                    Load Demo
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+
+        <!-- MODAL: TREASURER CLOUD LOGIN -->
+        <div v-if="cloudEnabled && showCloudLoginModal" class="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div class="bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-zinc-800">
+                <h3 class="font-extrabold text-white text-base mb-2">Treasurer Cloud Login</h3>
+                <p class="text-xs text-zinc-400 mb-4">Sign in with the Treasurer account connected to the online database.</p>
+                <input v-model="cloudLoginEmail" type="email" autocomplete="username" placeholder="Treasurer email"
+                       class="w-full mb-3 p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl">
+                <input v-model="cloudLoginPassword" type="password" autocomplete="current-password" placeholder="Password"
+                       class="w-full mb-4 p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl">
+                <div class="flex gap-2">
+                    <button @click="showCloudLoginModal=false" class="w-1/2 py-2.5 rounded-xl border border-zinc-700 text-zinc-300">Cancel</button>
+                    <button @click="cloudLogin()" class="w-1/2 py-2.5 rounded-xl bg-orange-500 text-black font-bold">Sign In</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: TREASURER PIN AUTHENTICATION -->
+        <div v-if="showAdminPinModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+            <div class="bg-zinc-900 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-orange-500/40 text-center animate-in zoom-in duration-150">
+                <div class="w-12 h-12 rounded-2xl bg-orange-500/20 text-orange-400 border border-orange-500/40 flex items-center justify-center text-xl mx-auto mb-3">
+                    <i class="fa-solid fa-shield-halved"></i>
+                </div>
+                <h3 class="font-black text-white text-lg font-tech">TREASURER LOGIN</h3>
+                <p class="text-xs text-zinc-400 mt-1 mb-4">Enter your Treasurer Security PIN to unlock full administrative rights.</p>
+
+                <form @submit.prevent="verifyAdminPin()" class="space-y-4">
+                    <div>
+                        <input 
+                            type="password" 
+                            v-model="inputPin" 
+                            placeholder="Enter Security PIN" 
+                            maxlength="10"
+                            required
+                            class="w-full text-center text-xl tracking-widest p-3 bg-zinc-950 text-orange-400 font-extrabold border border-zinc-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                        <p class="text-[11px] text-zinc-500 mt-1">Enter the PIN set by the Treasurer.</p>
+                    </div>
+
+                    <div class="flex gap-2">
+                        <button type="button" @click="showAdminPinModal = false" class="w-1/2 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 font-semibold hover:bg-zinc-800 text-xs transition">
+                            Cancel
+                        </button>
+                        <button type="submit" class="w-1/2 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-black font-extrabold text-xs shadow-lg shadow-orange-500/20 transition">
+                            Unlock Portal
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL: HOW TO PAY / GCASH INFO (FOR STUDENTS) -->
+        <div v-if="showPaymentInfoModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div class="bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-blue-500/30">
+                <div class="flex justify-between items-center pb-3 border-b border-zinc-800 mb-4">
+                    <h3 class="font-extrabold text-white text-base flex items-center gap-2">
+                        <i class="fa-solid fa-qrcode text-blue-400"></i> How to Submit Payments
+                    </h3>
+                    <button @click="showPaymentInfoModal = false" class="text-zinc-500 hover:text-white text-lg">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-4 text-xs">
+                    <div class="bg-zinc-950 p-4 rounded-xl border border-zinc-800 space-y-2">
+                        <div class="text-blue-400 font-bold uppercase tracking-wider text-[11px]">Primary Payment Channels</div>
+                        <div class="flex justify-between items-center pt-1 border-t border-zinc-800">
+                            <span class="text-zinc-400">Class Treasurer:</span>
+                            <span class="font-bold text-white">{{ settings.treasurerName || 'Juan Dela Cruz' }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-zinc-400">GCash / Maya:</span>
+                            <span class="font-extrabold text-emerald-400 text-sm font-mono">{{ settings.gcashNumber || '0917-123-4567' }}</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-zinc-400">Account Name:</span>
+                            <span class="font-semibold text-zinc-200">{{ settings.gcashAccountName || 'J*** D*** C***' }}</span>
+                        </div>
+                    </div>
+
+                    <div class="space-y-2 text-zinc-300">
+                        <div class="font-bold text-white flex items-center gap-1.5">
+                            <i class="fa-solid fa-list-check text-orange-400"></i> Instructions for Classmates:
+                        </div>
+                        <ol class="list-decimal list-inside text-zinc-400 space-y-1.5 pl-1">
+                            <li>Send payment via GCash, Maya, or in-person cash.</li>
+                            <li>Include your <b>Full Name</b> and <b>Fee Name</b> in the GCash notes or message.</li>
+                            <li>Take a screenshot of the GCash reference receipt.</li>
+                            <li>Send the screenshot to the Treasurer to update your matrix status!</li>
+                        </ol>
+                    </div>
+
+                    <button @click="showPaymentInfoModal = false" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-xl text-xs transition shadow-md">
+                        Understood
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: SETTINGS & TREASURER PIN CONFIG (ADMIN ONLY) -->
+        <div v-if="showSettingsModal && isAdmin" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div class="bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-zinc-800">
+                <div class="flex justify-between items-center pb-3 border-b border-zinc-800 mb-4">
+                    <h3 class="font-extrabold text-white text-base flex items-center gap-2">
+                        <i class="fa-solid fa-gear text-orange-500"></i> Treasury Portal Settings
+                    </h3>
+                    <button @click="showSettingsModal = false" class="text-zinc-500 hover:text-white text-lg">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="saveSettings()" class="space-y-3.5 text-xs">
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Class Treasurer Name</label>
+                        <input type="text" v-model="settingsForm.treasurerName" placeholder="e.g. Juan Dela Cruz" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">GCash / Payment Mobile Number</label>
+                        <input type="text" v-model="settingsForm.gcashNumber" placeholder="e.g. 09171234567" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 font-mono">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">GCash Account Holder Name</label>
+                        <input type="text" v-model="settingsForm.gcashAccountName" placeholder="e.g. J*** D*** C***" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Treasurer Security PIN</label>
+                        <input type="password" v-model="settingsForm.adminPin" placeholder="Enter your own security PIN" maxlength="10" autocomplete="new-password" class="w-full p-2.5 bg-zinc-950 text-orange-400 font-extrabold border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 font-mono">
+                    </div>
+
+                    <div class="pt-3 flex gap-2">
+                        <button type="button" @click="showSettingsModal = false" class="w-1/2 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 font-semibold hover:bg-zinc-800 transition">Cancel</button>
+                        <button type="submit" class="w-1/2 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-black font-extrabold shadow-lg shadow-orange-500/20 transition">Save Settings</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL: Log Payment (ADMIN ONLY) -->
+        <div v-if="showPaymentModal && isAdmin" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div class="bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-zinc-800">
+                <div class="flex justify-between items-center pb-3 border-b border-zinc-800 mb-4">
+                    <h3 class="font-extrabold text-white text-base flex items-center gap-2">
+                        <i class="fa-solid fa-circle-dollar-to-slot text-orange-500"></i> Log Payment Entry
+                    </h3>
+                    <button @click="showPaymentModal = false" class="text-zinc-500 hover:text-white text-lg">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="savePayment()" class="space-y-3.5 text-xs">
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Select Student <span class="text-orange-500">*</span></label>
+                        <select v-model="paymentForm.studentId" required class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500">
+                            <option value="" disabled>Choose Student...</option>
+                            <option v-for="student in students" :key="student.id" :value="student.id">{{ student.name }}</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Select Fee Item <span class="text-orange-500">*</span></label>
+                        <select v-model="paymentForm.feeId" required class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500">
+                            <option value="" disabled>Choose Fee...</option>
+                            <option v-for="fee in fees" :key="fee.id" :value="fee.id">{{ fee.name }} (₱{{ formatMoney(fee.amount) }})</option>
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label class="block font-semibold text-zinc-300 mb-1">Amount Paid (₱) <span class="text-orange-500">*</span></label>
+                            <input type="number" step="0.01" min="1" v-model.number="paymentForm.amount" required placeholder="0.00" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 font-bold text-orange-400">
+                        </div>
+                        <div>
+                            <label class="block font-semibold text-zinc-300 mb-1">Payment Mode</label>
+                            <select v-model="paymentForm.mode" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500">
+                                <option value="Cash">Cash</option>
+                                <option value="GCash">GCash</option>
+                                <option value="Maya">Maya</option>
+                                <option value="Bank Transfer">Bank Transfer</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Reference / Note</label>
+                        <input type="text" v-model="paymentForm.reference" placeholder="e.g. Ref #10293 or Handed during class" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 placeholder-zinc-600">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Date</label>
+                        <input type="date" v-model="paymentForm.date" required class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500">
+                    </div>
+
+                    <div class="pt-3 flex gap-2">
+                        <button type="button" @click="showPaymentModal = false" class="w-1/2 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 font-semibold hover:bg-zinc-800 transition">Cancel</button>
+                        <button type="submit" class="w-1/2 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-black font-extrabold shadow-lg shadow-orange-500/20 transition">Save Payment</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL: Add / Edit Fee (ADMIN ONLY) -->
+        <div v-if="showFeeModal && isAdmin" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div class="bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-zinc-800">
+                <div class="flex justify-between items-center pb-3 border-b border-zinc-800 mb-4">
+                    <h3 class="font-extrabold text-white text-base">
+                        {{ feeForm.id ? 'Edit School Fee' : 'Add New Fee (Bayarin)' }}
+                    </h3>
+                    <button @click="showFeeModal = false" class="text-zinc-500 hover:text-white text-lg">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="saveFee()" class="space-y-3.5 text-xs">
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Fee Name <span class="text-orange-500">*</span></label>
+                        <input type="text" v-model="feeForm.name" required placeholder="e.g. CE Dept Shirt, Surveying Lab Fund" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 placeholder-zinc-600">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Amount Per Student (₱) <span class="text-orange-500">*</span></label>
+                        <input type="number" step="0.01" min="1" v-model.number="feeForm.amount" required placeholder="350.00" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 font-bold text-orange-400">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Due Date (Optional)</label>
+                        <input type="date" v-model="feeForm.dueDate" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Description / Notes</label>
+                        <textarea v-model="feeForm.description" rows="2" placeholder="e.g. Official Civil Engineering department gear" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 placeholder-zinc-600"></textarea>
+                    </div>
+
+                    <div class="pt-3 flex gap-2">
+                        <button type="button" @click="showFeeModal = false" class="w-1/2 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 font-semibold hover:bg-zinc-800 transition">Cancel</button>
+                        <button type="submit" class="w-1/2 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-black font-extrabold shadow-lg shadow-orange-500/20 transition">Save Fee</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL: Add Single Student (ADMIN ONLY) -->
+        <div v-if="showStudentModal && isAdmin" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div class="bg-zinc-900 rounded-2xl max-w-md w-full p-6 shadow-2xl border border-zinc-800">
+                <div class="flex justify-between items-center pb-3 border-b border-zinc-800 mb-4">
+                    <h3 class="font-extrabold text-white text-base">Add Student to BSCE 3A Roster</h3>
+                    <button @click="showStudentModal = false" class="text-zinc-500 hover:text-white text-lg">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <form @submit.prevent="saveStudent()" class="space-y-3.5 text-xs">
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Full Name (Last Name, First Name) <span class="text-orange-500">*</span></label>
+                        <input type="text" v-model="studentForm.name" required placeholder="e.g. Dela Cruz, Juan" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 placeholder-zinc-600">
+                    </div>
+
+                    <div>
+                        <label class="block font-semibold text-zinc-300 mb-1">Student ID / Contact Number</label>
+                        <input type="text" v-model="studentForm.contact" placeholder="e.g. 2023-10923 or 09171234567" class="w-full p-2.5 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 placeholder-zinc-600">
+                    </div>
+
+                    <div class="pt-3 flex gap-2">
+                        <button type="button" @click="showStudentModal = false" class="w-1/2 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 font-semibold hover:bg-zinc-800 transition">Cancel</button>
+                        <button type="submit" class="w-1/2 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-black font-extrabold shadow-lg shadow-orange-500/20 transition">Add Student</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- MODAL: Batch Import Students (ADMIN ONLY) -->
+        <div v-if="showBatchModal && isAdmin" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div class="bg-zinc-900 rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-zinc-800">
+                <div class="flex justify-between items-center pb-3 border-b border-zinc-800 mb-4">
+                    <h3 class="font-extrabold text-white text-base">Batch Add Students</h3>
+                    <button @click="showBatchModal = false" class="text-zinc-500 hover:text-white text-lg">
+                        <i class="fa-solid fa-xmark"></i>
+                    </button>
+                </div>
+
+                <div class="space-y-3 text-xs">
+                    <p class="text-zinc-400">Enter student names (one name per line):</p>
+                    <textarea v-model="batchStudentText" rows="8" placeholder="Dela Cruz, Juan&#10;Santos, Maria&#10;Reyes, Carlos" class="w-full p-3 bg-zinc-950 text-white border border-zinc-700 rounded-xl focus:ring-2 focus:ring-orange-500 font-mono text-xs placeholder-zinc-600"></textarea>
+
+                    <div class="pt-2 flex gap-2">
+                        <button type="button" @click="showBatchModal = false" class="w-1/2 py-2.5 rounded-xl border border-zinc-700 text-zinc-300 font-semibold hover:bg-zinc-800 transition">Cancel</button>
+                        <button @click="processBatchImport()" class="w-1/2 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-black font-extrabold shadow-lg shadow-orange-500/20 transition">Import List</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- MODAL: Statement of Account / Clearance Slip (Printable for both sides) -->
+        <div v-if="selectedSOAStudent" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+            <div class="bg-white text-black rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-zinc-200 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <div id="printable-soa">
+                    <!-- Header -->
+                    <div class="text-center border-b-2 border-orange-500 pb-4 mb-4">
+                        <div class="font-black text-xl text-black uppercase tracking-wider font-tech">BSCE 3A - CLASS TREASURY</div>
+                        <div class="text-xs text-zinc-600 font-semibold uppercase">Department of Civil Engineering</div>
+                        <div class="text-sm font-extrabold text-orange-600 mt-2">STATEMENT OF ACCOUNT & CLEARANCE SLIP</div>
+                        <div class="text-[11px] text-zinc-500">Issued: {{ new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) }}</div>
+                    </div>
+
+                    <!-- Student Info -->
+                    <div class="bg-zinc-100 p-3 rounded-xl border border-zinc-300 mb-4 text-xs">
+                        <div class="flex justify-between">
+                            <span class="text-zinc-600 font-medium">Student Name:</span>
+                            <strong class="text-black text-sm">{{ selectedSOAStudent.name }}</strong>
+                        </div>
+                        <div class="flex justify-between mt-1" v-if="selectedSOAStudent.contact">
+                            <span class="text-zinc-600 font-medium">Contact / ID:</span>
+                            <span>{{ selectedSOAStudent.contact }}</span>
+                        </div>
+                    </div>
+
+                    <!-- Fee Breakdown Table -->
+                    <table class="w-full text-xs text-left border-collapse mb-4">
+                        <thead>
+                            <tr class="border-b-2 border-zinc-800 font-bold text-zinc-800 uppercase">
+                                <th class="py-2">Fee Particulars</th>
+                                <th class="py-2 text-right">Required</th>
+                                <th class="py-2 text-right">Paid</th>
+                                <th class="py-2 text-right">Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-zinc-200">
+                            <tr v-for="fee in fees" :key="fee.id">
+                                <td class="py-2 text-zinc-900 font-semibold">{{ fee.name }}</td>
+                                <td class="py-2 text-right">₱{{ formatMoney(fee.amount) }}</td>
+                                <td class="py-2 text-right text-emerald-700 font-bold">₱{{ formatMoney(getAmountPaidForFee(selectedSOAStudent.id, fee.id)) }}</td>
+                                <td class="py-2 text-right font-bold" :class="getFeeRemainingForStudent(selectedSOAStudent.id, fee.id, fee.amount) > 0 ? 'text-orange-600' : 'text-zinc-400'">
+                                    ₱{{ formatMoney(getFeeRemainingForStudent(selectedSOAStudent.id, fee.id, fee.amount)) }}
+                                </td>
+                            </tr>
+                        </tbody>
+                        <tfoot>
+                            <tr class="border-t-2 border-black font-extrabold text-sm">
+                                <td class="py-2.5 text-black">Total Summary</td>
+                                <td class="py-2.5 text-right">₱{{ formatMoney(totalFeesAmountPerStudent) }}</td>
+                                <td class="py-2.5 text-right text-emerald-700">₱{{ formatMoney(getStudentTotalPaid(selectedSOAStudent.id)) }}</td>
+                                <td class="py-2.5 text-right" :class="getStudentTotalBalance(selectedSOAStudent.id) > 0 ? 'text-orange-600' : 'text-emerald-700'">
+                                    ₱{{ formatMoney(getStudentTotalBalance(selectedSOAStudent.id)) }}
+                                </td>
+                            </tr>
+                        </tfoot>
+                    </table>
+
+                    <!-- Clearance Status Box -->
+                    <div class="p-3 rounded-xl border text-center font-extrabold text-xs mb-6 uppercase tracking-wider"
+                         :class="getStudentTotalBalance(selectedSOAStudent.id) === 0 ? 'bg-emerald-100 border-emerald-400 text-emerald-900' : 'bg-orange-100 border-orange-400 text-orange-950'">
+                        {{ getStudentTotalBalance(selectedSOAStudent.id) === 0 ? 'STATUS: FULLY CLEARED FOR THE TERM' : 'STATUS: UNPAID BALANCES PENDING' }}
+                    </div>
+
+                    <!-- Signatures -->
+                    <div class="mt-8 pt-4 border-t border-zinc-300 grid grid-cols-2 gap-4 text-center text-xs">
+                        <div>
+                            <div class="border-b border-zinc-600 w-3/4 mx-auto mb-1"></div>
+                            <div class="font-bold text-black">{{ settings.treasurerName || 'BSCE 3A Class Treasurer' }}</div>
+                            <div class="text-[10px] text-zinc-500">Class Treasurer</div>
+                        </div>
+                        <div>
+                            <div class="border-b border-zinc-600 w-3/4 mx-auto mb-1"></div>
+                            <div class="font-bold text-black">Student Signature</div>
+                            <div class="text-[10px] text-zinc-500">Conforme</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal Actions -->
+                <div class="no-print mt-6 pt-4 border-t border-zinc-200 flex justify-end gap-2">
+                    <button @click="selectedSOAStudent = null" class="px-4 py-2 bg-zinc-200 text-zinc-800 font-bold rounded-xl text-xs hover:bg-zinc-300 transition">
+                        Close
+                    </button>
+                    <button @click="printSOA()" class="px-4 py-2 bg-orange-500 text-black font-extrabold rounded-xl text-xs hover:bg-orange-600 transition flex items-center gap-1.5 shadow-md">
+                        <i class="fa-solid fa-print"></i> Print Statement
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Custom Toast Notification System -->
+        <div class="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+            <div v-for="toast in toasts" :key="toast.id" class="px-4 py-3 rounded-xl shadow-2xl text-xs font-bold text-white flex items-center gap-2 border animate-in slide-in-from-bottom duration-200"
+                 :class="toast.type === 'error' ? 'bg-rose-950 border-rose-500 text-rose-200' : 'bg-zinc-900 border-orange-500 text-zinc-100'">
+                <i class="fa-solid" :class="toast.type === 'error' ? 'fa-circle-exclamation text-rose-400' : 'fa-circle-check text-orange-400'"></i>
+                <span>{{ toast.message }}</span>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        /*
+         * CLOUD CONFIGURATION
+         * Replace these placeholders with your Supabase Project URL and publishable/anon key.
+         * Never put a Supabase service_role/secret key in this file.
+         */
+        const SUPABASE_URL = 'https://igamcnjvaurqdtorepul.supabase.co';
+        const SUPABASE_ANON_KEY = 'sb_publishable_gBx-Q8n769CyYeupUA-tXQ_bU1g7AII';
+        const CLOUD_ENABLED = !SUPABASE_URL.includes('PASTE_YOUR_') &&
+                              !SUPABASE_ANON_KEY.includes('PASTE_YOUR_');
+        const supabaseClient = CLOUD_ENABLED
+            ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+            : null;
+    </script>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    // Role State (default: False / Student View)
+                    isAdmin: false,
+                    inputPin: '',
+                    showAdminPinModal: false,
+                    showCloudLoginModal: false,
+                    cloudLoginEmail: '',
+                    cloudLoginPassword: '',
+                    showPaymentInfoModal: false,
+                    showSettingsModal: false,
+
+                    activeTab: 'matrix',
+                    searchQuery: '',
+                    studentSearchInput: '',
+                    selectedStudentLookupId: '',
+                    isSynced: false,
+                    cloudSession: null,
+                    realtimeChannel: null,
+                    syncInProgress: false,
+                    pendingCloudSync: false,
+                    settingsCloudDirty: false,
+                    cloudStatus: 'Local mode',
+                    cloudEnabled: CLOUD_ENABLED,
+                    
+                    // Modals control
+                    showPaymentModal: false,
+                    showFeeModal: false,
+                    showStudentModal: false,
+                    showBatchModal: false,
+                    selectedSOAStudent: null,
+
+                    // Settings
+                    settings: {
+                        treasurerName: 'BSCE 3A Treasurer',
+                        gcashNumber: '0917-123-4567',
+                        gcashAccountName: 'J*** D*** C***',
+                        adminPin: '1234'
+                    },
+
+                    settingsForm: {
+                        treasurerName: '',
+                        gcashNumber: '',
+                        gcashAccountName: '',
+                        adminPin: ''
+                    },
+
+                    // Datasets
+                    students: [
+                        { id: 'std-1', name: 'Abad, Marco', contact: '2023-10001' },
+                        { id: 'std-2', name: 'Alvarez, Sofia', contact: '2023-10002' },
+                        { id: 'std-3', name: 'Bautista, Kevin', contact: '2023-10003' },
+                        { id: 'std-4', name: 'Cruz, Gabriel', contact: '2023-10004' },
+                        { id: 'std-5', name: 'Dela Cruz, Juan', contact: '2023-10005' },
+                        { id: 'std-6', name: 'Garcia, Beatriz', contact: '2023-10006' },
+                        { id: 'std-7', name: 'Mendoza, Liam', contact: '2023-10007' },
+                        { id: 'std-8', name: 'Reyes, Camille', contact: '2023-10008' },
+                        { id: 'std-9', name: 'Santos, Christian', contact: '2023-10009' },
+                        { id: 'std-10', name: 'Torres, Angela', contact: '2023-10010' }
+                    ],
+
+                    fees: [
+                        { id: 'fee-1', name: 'CE Dept T-Shirt', amount: 350, dueDate: '2026-10-15', description: 'Official department shirt for Civil Engineering week' },
+                        { id: 'fee-2', name: 'Surveying Lab Fee', amount: 200, dueDate: '2026-10-30', description: 'Equipment maintenance and surveying consumables' },
+                        { id: 'fee-3', name: 'Class Treasury Fund', amount: 100, dueDate: '2026-11-15', description: 'Semester class fund for printing & announcements' }
+                    ],
+
+                    payments: [
+                        { id: 'pay-1', studentId: 'std-1', feeId: 'fee-1', amount: 350, mode: 'GCash', reference: 'Ref# 1029384', date: '2026-09-20' },
+                        { id: 'pay-2', studentId: 'std-1', feeId: 'fee-2', amount: 200, mode: 'Cash', reference: 'Handed in room 302', date: '2026-09-22' },
+                        { id: 'pay-3', studentId: 'std-1', feeId: 'fee-3', amount: 100, mode: 'GCash', reference: 'Ref# 9081234', date: '2026-09-25' },
+                        { id: 'pay-4', studentId: 'std-2', feeId: 'fee-1', amount: 350, mode: 'GCash', reference: 'Ref# 5543120', date: '2026-09-21' },
+                        { id: 'pay-5', studentId: 'std-3', feeId: 'fee-1', amount: 200, mode: 'Cash', reference: 'Partial payment', date: '2026-09-24' },
+                        { id: 'pay-6', studentId: 'std-5', feeId: 'fee-1', amount: 350, mode: 'Maya', reference: 'Ref# 7781203', date: '2026-09-25' }
+                    ],
+
+                    // Form state models
+                    paymentForm: {
+                        studentId: '',
+                        feeId: '',
+                        amount: 0,
+                        mode: 'Cash',
+                        reference: '',
+                        date: new Date().toISOString().substr(0, 10)
+                    },
+
+                    feeForm: {
+                        id: null,
+                        name: '',
+                        amount: 0,
+                        dueDate: '',
+                        description: ''
+                    },
+
+                    studentForm: {
+                        id: null,
+                        name: '',
+                        contact: ''
+                    },
+
+                    batchStudentText: '',
+                    toasts: []
+                }
+            },
+
+            computed: {
+                sortedStudents() {
+                    return [...this.students].sort((a, b) => a.name.localeCompare(b.name));
+                },
+
+                filteredStudents() {
+                    if (!this.searchQuery) return this.sortedStudents;
+                    const q = this.searchQuery.toLowerCase();
+                    return this.sortedStudents.filter(s => s.name.toLowerCase().includes(q) || (s.contact && s.contact.toLowerCase().includes(q)));
+                },
+
+                filteredFees() {
+                    if (!this.searchQuery) return this.fees;
+                    const q = this.searchQuery.toLowerCase();
+                    return this.fees.filter(f => f.name.toLowerCase().includes(q) || (f.description && f.description.toLowerCase().includes(q)));
+                },
+
+                filteredPayments() {
+                    let list = [...this.payments].sort((a, b) => new Date(b.date) - new Date(a.date));
+                    if (!this.searchQuery) return list;
+                    const q = this.searchQuery.toLowerCase();
+                    return list.filter(p => {
+                        const sName = this.getStudentName(p.studentId).toLowerCase();
+                        const fName = this.getFeeName(p.feeId).toLowerCase();
+                        return sName.includes(q) || fName.includes(q) || (p.reference && p.reference.toLowerCase().includes(q));
+                    });
+                },
+
+                selectedStudentLookup() {
+                    if (this.selectedStudentLookupId) {
+                        return this.students.find(s => s.id === this.selectedStudentLookupId) || null;
+                    }
+                    if (this.studentSearchInput.trim()) {
+                        const q = this.studentSearchInput.trim().toLowerCase();
+                        return this.students.find(s => s.name.toLowerCase().includes(q)) || null;
+                    }
+                    return null;
+                },
+
+                totalFeesAmountPerStudent() {
+                    return this.fees.reduce((sum, f) => sum + (Number(f.amount) || 0), 0);
+                },
+
+                totalExpectedCollection() {
+                    return this.totalFeesAmountPerStudent * this.students.length;
+                },
+
+                totalCollectedAmount() {
+                    return this.payments.reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+                },
+
+                totalRemainingBalance() {
+                    const balance = this.totalExpectedCollection - this.totalCollectedAmount;
+                    return balance > 0 ? balance : 0;
+                },
+
+                collectionRate() {
+                    if (this.totalExpectedCollection === 0) return 0;
+                    return Math.min(100, (this.totalCollectedAmount / this.totalExpectedCollection) * 100);
+                },
+
+                fullyPaidStudentCount() {
+                    return this.students.filter(s => this.getStudentTotalBalance(s.id) === 0).length;
+                },
+
+                unpaidStudentCount() {
+                    return this.students.length - this.fullyPaidStudentCount;
+                }
+            },
+
+            async created() {
+                this.loadFromLocalStorage();
+                await this.initializeCloud();
+            },
+
+            methods: {
+                async initializeCloud() {
+                    if (!CLOUD_ENABLED) {
+                        this.isSynced = false;
+                        this.cloudStatus = 'Local mode';
+                        return;
+                    }
+                    try {
+                        const { data: sessionData } = await supabaseClient.auth.getSession();
+                        this.cloudSession = sessionData?.session || null;
+                        await this.loadFromCloud();
+                        this.setupRealtime();
+                        if (this.cloudSession) {
+                            this.cloudStatus = 'Cloud connected';
+                        } else {
+                            this.cloudStatus = 'Cloud read-only';
+                        }
+                        this.isSynced = true;
+                    } catch (e) {
+                        console.error('Cloud initialization failed:', e);
+                        this.cloudStatus = 'Cloud error';
+                        this.isSynced = false;
+                    }
+                },
+
+                setupRealtime() {
+                    if (!CLOUD_ENABLED || this.realtimeChannel) return;
+                    this.realtimeChannel = supabaseClient
+                        .channel('bsce3a-fees-live')
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'students' }, () => this.refreshCloudSilently())
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'fees' }, () => this.refreshCloudSilently())
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => this.refreshCloudSilently())
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, () => this.refreshCloudSilently())
+                        .subscribe();
+                },
+
+                async refreshCloudSilently() {
+                    if (this.syncInProgress) return;
+                    try {
+                        await this.loadFromCloud();
+                        this.isSynced = true;
+                        this.cloudStatus = this.cloudSession ? 'Cloud connected' : 'Cloud read-only';
+                    } catch (e) {
+                        console.error('Realtime refresh failed:', e);
+                    }
+                },
+
+                async signInTreasurer(email, password) {
+                    if (!CLOUD_ENABLED) return { error: new Error('Cloud mode is not configured.') };
+                    if (window.location.protocol === 'file:') {
+                        return { error: new Error('This website is being opened as a local file. Please open the GitHub Pages/HTTPS version of the website. Supabase login cannot reliably authenticate from file:// pages.') };
+                    }
+                    const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+                    if (!error) {
+                        this.cloudSession = data.session;
+                        this.isAdmin = true;
+                        this.setupRealtime();
+                        await this.loadFromCloud();
+                        this.cloudStatus = 'Cloud connected';
+                        this.isSynced = true;
+                    }
+                    return { data, error };
+                },
+
+                async signOutTreasurer() {
+                    if (CLOUD_ENABLED) await supabaseClient.auth.signOut();
+                    this.cloudSession = null;
+                    this.isAdmin = false;
+                    this.cloudStatus = CLOUD_ENABLED ? 'Cloud read-only' : 'Local mode';
+                },
+
+                async loadFromCloud() {
+                    if (!CLOUD_ENABLED) return false;
+                    const [studentsRes, feesRes, paymentsRes] = await Promise.all([
+                        supabaseClient.from('students').select('*').order('name'),
+                        supabaseClient.from('fees').select('*').order('name'),
+                        supabaseClient.from('payments').select('*').order('date', { ascending: false })
+                    ]);
+                    if (studentsRes.error) throw studentsRes.error;
+                    if (feesRes.error) throw feesRes.error;
+                    if (paymentsRes.error) throw paymentsRes.error;
+
+                    this.students = (studentsRes.data || []).map(s => ({
+                        id: s.id, name: s.name, contact: s.contact || ''
+                    }));
+                    this.fees = (feesRes.data || []).map(f => ({
+                        id: f.id, name: f.name, amount: Number(f.amount),
+                        dueDate: f.due_date || '', description: f.description || ''
+                    }));
+                    this.payments = (paymentsRes.data || []).map(p => ({
+                        id: p.id, studentId: p.student_id, feeId: p.fee_id,
+                        amount: Number(p.amount), mode: p.mode || 'Cash',
+                        reference: p.reference || '', date: p.date
+                    }));
+
+                    const settingsRes = await supabaseClient.from('app_settings').select('*').limit(1).maybeSingle();
+                    if (!settingsRes.error && settingsRes.data) {
+                        this.settings = {
+                            treasurerName: settingsRes.data.treasurer_name || 'BSCE 3A Treasurer',
+                            gcashNumber: settingsRes.data.gcash_number || '',
+                            gcashAccountName: settingsRes.data.gcash_account_name || '',
+                            adminPin: this.settings.adminPin
+                        };
+                        this.settingsForm = { ...this.settings };
+                    }
+                    return true;
+                },
+
+                async cloudRequest(label, operation) {
+                    this.saveToLocalStorage();
+                    if (!CLOUD_ENABLED || !this.cloudSession) {
+                        return true;
+                    }
+                    this.syncInProgress = true;
+                    try {
+                        const r = await operation();
+                        if (r.error) {
+                            const e = r.error;
+                            const detail = [e.message, e.code ? `code ${e.code}` : '', e.hint || '', e.details || '']
+                                .filter(Boolean).join(' | ');
+                            throw new Error(`${label}: ${detail}`);
+                        }
+                        this.isSynced = true;
+                        this.cloudStatus = 'Cloud connected';
+                        this.saveToLocalStorage();
+                        return true;
+                    } catch (e) {
+                        console.error('Cloud request failed:', e);
+                        this.cloudStatus = 'Sync failed';
+                        const detail = e && e.message ? e.message : 'Network or Supabase error';
+                        this.showToast(`Cloud sync failed: ${detail}`, 'error');
+                        return false;
+                    } finally {
+                        this.syncInProgress = false;
+                    }
+                },
+
+                async syncRecord(table, row, label) {
+                    return this.cloudRequest(label, () =>
+                        supabaseClient.from(table).upsert(row, { onConflict: 'id' })
+                    );
+                },
+
+                async syncRecords(table, rows, label) {
+                    if (!rows.length) {
+                        this.saveToLocalStorage();
+                        return true;
+                    }
+                    return this.cloudRequest(label, () =>
+                        supabaseClient.from(table).upsert(rows, { onConflict: 'id' })
+                    );
+                },
+
+                async deleteRecord(table, id, label) {
+                    return this.cloudRequest(label, () =>
+                        supabaseClient.from(table).delete().eq('id', id)
+                    );
+                },
+
+                async syncSettingsToCloud() {
+                    return this.cloudRequest('app_settings update', () =>
+                        supabaseClient.from('app_settings').upsert({
+                            id: 1,
+                            treasurer_name: this.settings.treasurerName,
+                            gcash_number: this.settings.gcashNumber,
+                            gcash_account_name: this.settings.gcashAccountName
+                        }, { onConflict: 'id' })
+                    );
+                },
+
+                // Kept for compatibility with any older UI actions. Normal edits now use
+                // one-record cloud requests instead of re-uploading the entire database.
+                async syncCloud() {
+                    this.saveToLocalStorage();
+                    if (!CLOUD_ENABLED || !this.cloudSession) return true;
+                    try {
+                        const students = this.students.map(s => ({ id: s.id, name: s.name, contact: s.contact || '' }));
+                        const fees = this.fees.map(f => ({
+                            id: f.id, name: f.name, amount: Number(f.amount),
+                            due_date: f.dueDate || null, description: f.description || ''
+                        }));
+                        const payments = this.payments.map(p => ({
+                            id: p.id, student_id: p.studentId, fee_id: p.feeId,
+                            amount: Number(p.amount), mode: p.mode || 'Cash',
+                            reference: p.reference || '', date: p.date
+                        }));
+
+                        // Full sync is intentionally only a fallback/manual operation.
+                        const [sr, fr, pr] = await Promise.all([
+                            supabaseClient.from('students').upsert(students, { onConflict: 'id' }),
+                            supabaseClient.from('fees').upsert(fees, { onConflict: 'id' }),
+                            supabaseClient.from('payments').upsert(payments, { onConflict: 'id' })
+                        ]);
+                        for (const [label, r] of [['students upsert', sr], ['fees upsert', fr], ['payments upsert', pr]]) {
+                            if (r.error) throw new Error(`${label}: ${r.error.message || 'request failed'}`);
+                        }
+                        if (this.settingsCloudDirty) {
+                            const ok = await this.syncSettingsToCloud();
+                            if (ok) this.settingsCloudDirty = false;
+                        }
+                        this.isSynced = true;
+                        this.cloudStatus = 'Cloud connected';
+                        return true;
+                    } catch (e) {
+                        console.error('Full cloud sync failed:', e);
+                        this.cloudStatus = 'Sync failed';
+                        this.showToast(`Cloud sync failed: ${e.message || 'Network or Supabase error'}`, 'error');
+                        return false;
+                    }
+                },
+
+                async refreshCloud() {
+                    if (!CLOUD_ENABLED) {
+                        this.showToast('Cloud database is not configured yet.', 'error');
+                        return;
+                    }
+                    try {
+                        await this.loadFromCloud();
+                        this.showToast('Latest online data loaded.');
+                    } catch (e) {
+                        console.error(e);
+                        this.showToast('Could not load online data.', 'error');
+                    }
+                },
+
+                openAdminPinModal() {
+                    if (CLOUD_ENABLED) {
+                        this.cloudLoginEmail = '';
+                        this.cloudLoginPassword = '';
+                        this.showCloudLoginModal = true;
+                    } else {
+                        this.inputPin = '';
+                        this.showAdminPinModal = true;
+                    }
+                },
+
+                async cloudLogin() {
+                    const { error } = await this.signInTreasurer(this.cloudLoginEmail, this.cloudLoginPassword);
+                    if (error) {
+                        this.showToast(error.message || 'Treasurer login failed.', 'error');
+                        return;
+                    }
+                    this.showCloudLoginModal = false;
+                    this.showToast('Treasurer cloud access unlocked.');
+                },
+
+                verifyAdminPin() {
+                    const pinToMatch = this.settings.adminPin || '1234';
+                    if (this.inputPin === pinToMatch) {
+                        this.isAdmin = true;
+                        this.showAdminPinModal = false;
+                        this.showToast('Treasurer Portal Unlocked (Full Admin Access)');
+                    } else {
+                        this.showToast('Incorrect Security PIN. Please try again.', 'error');
+                    }
+                },
+
+                async lockAdminMode() {
+                    if (CLOUD_ENABLED) await this.signOutTreasurer();
+                    else this.isAdmin = false;
+                    if (this.activeTab === 'reports') this.activeTab = 'matrix';
+                    this.showToast('Locked to Student Read-Only Portal');
+                },
+
+                async saveSettings() {
+                    this.settings = { ...this.settingsForm };
+                    this.settingsCloudDirty = true;
+                    this.saveToLocalStorage();
+                    const ok = await this.syncSettingsToCloud();
+                    if (ok) this.settingsCloudDirty = false;
+                    this.showSettingsModal = false;
+                    this.showToast(ok ? 'Settings & Security PIN Updated' : 'Settings saved locally; cloud sync failed.', ok ? 'success' : 'error');
+                },
+
+                // Calculation Helpers
+                getAmountPaidForFee(studentId, feeId) {
+                    return this.payments
+                        .filter(p => p.studentId === studentId && p.feeId === feeId)
+                        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+                },
+
+                getFeeRemainingForStudent(studentId, feeId, feeAmount) {
+                    const paid = this.getAmountPaidForFee(studentId, feeId);
+                    const rem = feeAmount - paid;
+                    return rem > 0 ? rem : 0;
+                },
+
+                getStudentTotalPaid(studentId) {
+                    return this.payments
+                        .filter(p => p.studentId === studentId)
+                        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+                },
+
+                getStudentTotalBalance(studentId) {
+                    const totalRequired = this.totalFeesAmountPerStudent;
+                    const paid = this.getStudentTotalPaid(studentId);
+                    const bal = totalRequired - paid;
+                    return bal > 0 ? bal : 0;
+                },
+
+                getUnpaidFeeCount(studentId) {
+                    return this.fees.filter(f => this.getFeeRemainingForStudent(studentId, f.id, f.amount) > 0).length;
+                },
+
+                getFeeStatusText(studentId, feeId, feeAmount) {
+                    const paid = this.getAmountPaidForFee(studentId, feeId);
+                    if (paid >= feeAmount) return 'PAID';
+                    if (paid > 0) return 'PARTIAL';
+                    return 'UNPAID';
+                },
+
+                getFeeStatusClass(studentId, feeId, feeAmount) {
+                    const status = this.getFeeStatusText(studentId, feeId, feeAmount);
+                    if (status === 'PAID') return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
+                    if (status === 'PARTIAL') return 'bg-orange-500/20 text-orange-400 border-orange-500/40';
+                    return 'bg-rose-500/20 text-rose-400 border-rose-500/40';
+                },
+
+                getFeeTotalCollected(feeId) {
+                    return this.payments
+                        .filter(p => p.feeId === feeId)
+                        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+                },
+
+                getFeeCollectionPercentage(feeId) {
+                    const fee = this.fees.find(f => f.id === feeId);
+                    if (!fee || this.students.length === 0) return 0;
+                    const totalTarget = fee.amount * this.students.length;
+                    const collected = this.getFeeTotalCollected(feeId);
+                    return Math.min(100, (collected / totalTarget) * 100);
+                },
+
+                getStudentName(studentId) {
+                    const student = this.students.find(s => s.id === studentId);
+                    return student ? student.name : 'Unknown Student';
+                },
+
+                getFeeName(feeId) {
+                    const fee = this.fees.find(f => f.id === feeId);
+                    return fee ? fee.name : 'Unknown Fee';
+                },
+
+                formatMoney(val) {
+                    return Number(val || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                },
+
+                formatDate(dateStr) {
+                    if (!dateStr) return 'N/A';
+                    const d = new Date(dateStr);
+                    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                },
+
+                quickPaymentEntry(student, fee) {
+                    if (!this.isAdmin) {
+                        this.viewSOA(student);
+                        return;
+                    }
+                    const remaining = this.getFeeRemainingForStudent(student.id, fee.id, fee.amount);
+                    this.paymentForm = {
+                        studentId: student.id,
+                        feeId: fee.id,
+                        amount: remaining > 0 ? remaining : fee.amount,
+                        mode: 'Cash',
+                        reference: '',
+                        date: new Date().toISOString().substr(0, 10)
+                    };
+                    this.showPaymentModal = true;
+                },
+
+                openPaymentModal(studentId = '') {
+                    if (!this.isAdmin) return;
+                    this.paymentForm = {
+                        studentId: studentId || (this.students[0] ? this.students[0].id : ''),
+                        feeId: this.fees[0] ? this.fees[0].id : '',
+                        amount: 0,
+                        mode: 'Cash',
+                        reference: '',
+                        date: new Date().toISOString().substr(0, 10)
+                    };
+                    this.showPaymentModal = true;
+                },
+
+                async savePayment() {
+                    if (!this.paymentForm.studentId || !this.paymentForm.feeId || !this.paymentForm.amount) {
+                        this.showToast('Please fill in all required payment details.', 'error');
+                        return;
+                    }
+                    const newPay = {
+                        id: 'pay-' + Date.now(),
+                        studentId: this.paymentForm.studentId,
+                        feeId: this.paymentForm.feeId,
+                        amount: Number(this.paymentForm.amount),
+                        mode: this.paymentForm.mode,
+                        reference: this.paymentForm.reference,
+                        date: this.paymentForm.date
+                    };
+                    this.payments.push(newPay);
+                    this.saveToLocalStorage();
+                    const ok = await this.syncRecord('payments', {
+                        id: newPay.id,
+                        student_id: newPay.studentId,
+                        fee_id: newPay.feeId,
+                        amount: Number(newPay.amount),
+                        mode: newPay.mode || 'Cash',
+                        reference: newPay.reference || '',
+                        date: newPay.date
+                    }, 'payments upsert');
+                    this.showPaymentModal = false;
+                    this.showToast(ok ? 'Payment logged successfully!' : 'Payment saved locally; cloud sync failed.', ok ? 'success' : 'error');
+                },
+
+                async deletePayment(payId) {
+                    if (!this.isAdmin) return;
+                    this.payments = this.payments.filter(p => p.id !== payId);
+                    this.saveToLocalStorage();
+                    const ok = await this.deleteRecord('payments', payId, 'payments delete');
+                    this.showToast(ok ? 'Payment entry deleted.' : 'Payment deleted locally; cloud sync failed.', ok ? 'success' : 'error');
+                },
+
+                openFeeModal() {
+                    if (!this.isAdmin) return;
+                    this.feeForm = { id: null, name: '', amount: 0, dueDate: '', description: '' };
+                    this.showFeeModal = true;
+                },
+
+                editFee(fee) {
+                    if (!this.isAdmin) return;
+                    this.feeForm = { ...fee };
+                    this.showFeeModal = true;
+                },
+
+                async saveFee() {
+                    if (!this.feeForm.name || !this.feeForm.amount) {
+                        this.showToast('Please enter fee name and amount.', 'error');
+                        return;
+                    }
+                    if (this.feeForm.id) {
+                        const idx = this.fees.findIndex(f => f.id === this.feeForm.id);
+                        if (idx !== -1) this.fees[idx] = { ...this.feeForm };
+                    } else {
+                        this.fees.push({ ...this.feeForm, id: 'fee-' + Date.now() });
+                    }
+                    const fee = this.fees.find(f => f.id === this.feeForm.id) || this.fees[this.fees.length - 1];
+                    this.saveToLocalStorage();
+                    const ok = await this.syncRecord('fees', {
+                        id: fee.id,
+                        name: fee.name,
+                        amount: Number(fee.amount),
+                        due_date: fee.dueDate || null,
+                        description: fee.description || ''
+                    }, 'fees upsert');
+                    this.showFeeModal = false;
+                    this.showToast(ok ? 'Fee saved successfully!' : 'Fee saved locally; cloud sync failed.', ok ? 'success' : 'error');
+                },
+
+                async deleteFee(fee) {
+                    if (!this.isAdmin) return;
+                    this.fees = this.fees.filter(f => f.id !== fee.id);
+                    this.payments = this.payments.filter(p => p.feeId !== fee.id);
+                    this.saveToLocalStorage();
+                    let ok = true;
+                    if (CLOUD_ENABLED && this.cloudSession) {
+                        ok = await this.cloudRequest('payments delete for fee', () =>
+                            supabaseClient.from('payments').delete().eq('fee_id', fee.id)
+                        );
+                        if (ok) ok = await this.deleteRecord('fees', fee.id, 'fees delete');
+                    }
+                    this.showToast(ok ? `Deleted ${fee.name}.` : `Deleted ${fee.name} locally; cloud sync failed.`, ok ? 'success' : 'error');
+                },
+
+                openStudentModal() {
+                    if (!this.isAdmin) return;
+                    this.studentForm = { id: null, name: '', contact: '' };
+                    this.showStudentModal = true;
+                },
+
+                async saveStudent() {
+                    if (!this.studentForm.name) {
+                        this.showToast('Please enter student name.', 'error');
+                        return;
+                    }
+                    const newStudent = {
+                        id: 'std-' + Date.now(),
+                        name: this.studentForm.name.trim(),
+                        contact: this.studentForm.contact.trim()
+                    };
+                    this.students.push(newStudent);
+                    this.saveToLocalStorage();
+                    const ok = await this.syncRecord('students', newStudent, 'students upsert');
+                    this.showStudentModal = false;
+                    this.showToast(ok ? 'Student added to roster!' : 'Student saved locally; cloud sync failed.', ok ? 'success' : 'error');
+                },
+
+                openBatchStudentModal() {
+                    if (!this.isAdmin) return;
+                    this.batchStudentText = '';
+                    this.showBatchModal = true;
+                },
+
+                async processBatchImport() {
+                    const lines = this.batchStudentText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+                    if (lines.length === 0) {
+                        this.showToast('No student names provided.', 'error');
+                        return;
+                    }
+                    const batch = lines.map((name, idx) => ({
+                        id: 'std-' + Date.now() + '-' + idx,
+                        name: name,
+                        contact: ''
+                    }));
+                    this.students.push(...batch);
+                    this.saveToLocalStorage();
+                    const ok = await this.syncRecords('students', batch, 'students batch upsert');
+                    this.showBatchModal = false;
+                    this.showToast(ok ? `Batch added ${lines.length} students.` : `Batch added locally; cloud sync failed.`, ok ? 'success' : 'error');
+                },
+
+                async deleteStudent(student) {
+                    if (!this.isAdmin) return;
+                    this.students = this.students.filter(s => s.id !== student.id);
+                    this.payments = this.payments.filter(p => p.studentId !== student.id);
+                    this.saveToLocalStorage();
+                    let ok = true;
+                    if (CLOUD_ENABLED && this.cloudSession) {
+                        ok = await this.cloudRequest('payments delete for student', () =>
+                            supabaseClient.from('payments').delete().eq('student_id', student.id)
+                        );
+                        if (ok) ok = await this.deleteRecord('students', student.id, 'students delete');
+                    }
+                    this.showToast(ok ? `Removed ${student.name} from roster.` : `Removed ${student.name} locally; cloud sync failed.`, ok ? 'success' : 'error');
+                },
+
+                // Statement & Printing
+                viewSOA(student) {
+                    this.selectedSOAStudent = student;
+                },
+
+                printSOA() {
+                    window.print();
+                },
+
+                saveToLocalStorage() {
+                    try {
+                        localStorage.setItem('bsce3a_students', JSON.stringify(this.students));
+                        localStorage.setItem('bsce3a_fees', JSON.stringify(this.fees));
+                        localStorage.setItem('bsce3a_payments', JSON.stringify(this.payments));
+                        localStorage.setItem('bsce3a_settings', JSON.stringify(this.settings));
+                    } catch (e) {
+                        console.warn('LocalStorage save failed:', e);
+                    }
+                },
+
+                loadFromLocalStorage() {
+                    try {
+                        const s = localStorage.getItem('bsce3a_students');
+                        const f = localStorage.getItem('bsce3a_fees');
+                        const p = localStorage.getItem('bsce3a_payments');
+                        const set = localStorage.getItem('bsce3a_settings');
+
+                        if (s) this.students = JSON.parse(s);
+                        if (f) this.fees = JSON.parse(f);
+                        if (p) this.payments = JSON.parse(p);
+                        if (set) {
+                            this.settings = JSON.parse(set);
+                            this.settingsForm = { ...this.settings };
+                        } else {
+                            this.settingsForm = { ...this.settings };
+                        }
+                    } catch (e) {
+                        console.warn('LocalStorage read failed:', e);
+                    }
+                },
+
+                exportToCSV() {
+                    let csv = 'Student Name,Contact/ID,';
+                    csv += this.fees.map(f => `"${f.name} (₱${f.amount})"`).join(',') + ',Total Paid,Total Balance,Clearance Status\n';
+
+                    this.sortedStudents.forEach(s => {
+                        csv += `"${s.name}","${s.contact || ''}",`;
+                        this.fees.forEach(f => {
+                            const paid = this.getAmountPaidForFee(s.id, f.id);
+                            csv += `${paid},`;
+                        });
+                        const totalPaid = this.getStudentTotalPaid(s.id);
+                        const balance = this.getStudentTotalBalance(s.id);
+                        const status = balance === 0 ? 'CLEARED' : 'PENDING';
+                        csv += `${totalPaid},${balance},${status}\n`;
+                    });
+
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.setAttribute('download', `BSCE_3A_Treasury_Matrix_${new Date().toISOString().substr(0,10)}.csv`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    this.showToast('CSV Matrix downloaded.');
+                },
+
+                backupJSON() {
+                    const backupData = {
+                        students: this.students,
+                        fees: this.fees,
+                        payments: this.payments,
+                        settings: this.settings,
+                        exportDate: new Date().toISOString()
+                    };
+                    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.setAttribute('download', `BSCE_3A_Treasury_Backup_${new Date().toISOString().substr(0,10)}.json`);
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    this.showToast('JSON Backup downloaded.');
+                },
+
+                restoreJSON(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const data = JSON.parse(e.target.result);
+                            if (data.students && data.fees && data.payments) {
+                                this.students = data.students;
+                                this.fees = data.fees;
+                                this.payments = data.payments;
+                                if (data.settings) this.settings = data.settings;
+                                this.saveToLocalStorage();
+                                this.showToast('Data restored successfully!');
+                            } else {
+                                this.showToast('Invalid backup file format.', 'error');
+                            }
+                        } catch (err) {
+                            this.showToast('Error reading backup file.', 'error');
+                        }
+                    };
+                    reader.readAsText(file);
+                },
+
+                confirmResetData() {
+                    if (!this.isAdmin) return;
+                    this.students = [];
+                    this.fees = [];
+                    this.payments = [];
+                    this.saveToLocalStorage();
+                    this.showToast('All treasury records cleared.');
+                },
+
+                loadSampleData() {
+                    this.students = [
+                        { id: 'std-1', name: 'Abad, Marco', contact: '2023-10001' },
+                        { id: 'std-2', name: 'Alvarez, Sofia', contact: '2023-10002' },
+                        { id: 'std-3', name: 'Bautista, Kevin', contact: '2023-10003' },
+                        { id: 'std-4', name: 'Cruz, Gabriel', contact: '2023-10004' },
+                        { id: 'std-5', name: 'Dela Cruz, Juan', contact: '2023-10005' }
+                    ];
+                    this.fees = [
+                        { id: 'fee-1', name: 'CE Dept T-Shirt', amount: 350, dueDate: '2026-10-15', description: 'Official department shirt' },
+                        { id: 'fee-2', name: 'Surveying Lab Fee', amount: 200, dueDate: '2026-10-30', description: 'Equipment fee' }
+                    ];
+                    this.payments = [
+                        { id: 'pay-1', studentId: 'std-1', feeId: 'fee-1', amount: 350, mode: 'GCash', reference: 'Ref# 10293', date: '2026-09-20' },
+                        { id: 'pay-2', studentId: 'std-1', feeId: 'fee-2', amount: 200, mode: 'Cash', reference: 'Handed in room', date: '2026-09-22' }
+                    ];
+                    this.saveToLocalStorage();
+                    this.showToast('Demo dataset loaded.');
+                },
+
+                showToast(message, type = 'success') {
+                    const id = Date.now();
+                    this.toasts.push({ id, message, type });
+                    setTimeout(() => {
+                        this.toasts = this.toasts.filter(t => t.id !== id);
+                    }, 3500);
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
